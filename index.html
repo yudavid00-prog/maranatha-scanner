@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>摄像头扫码</title>
+<style>
+  body { font-family: -apple-system, "PingFang SC", sans-serif; margin: 0; padding: 16px; background: #f5f5f5; }
+  h2 { font-size: 20px; margin: 0 0 16px; }
+  label { display: block; font-size: 13px; color: #555; margin: 12px 0 4px; }
+  input, select {
+    width: 100%; box-sizing: border-box; font-size: 18px; padding: 10px;
+    border: 1px solid #ccc; border-radius: 8px; background: white;
+  }
+  button {
+    width: 100%; font-size: 17px; padding: 13px; margin-top: 10px;
+    border: none; border-radius: 8px; background: #1a73e8; color: white;
+  }
+  button.secondary { background: #eee; color: #333; }
+  button.submit { background: #1e8e3e; font-size: 19px; padding: 16px; }
+  #msg { margin-top: 12px; padding: 12px; border-radius: 8px; font-size: 14px; display: none; }
+  #msg.ok { background: #e6f4ea; color: #1e7e34; display: block; }
+  #msg.warn { background: #fff3cd; color: #8a6d00; display: block; }
+  #msg.err { background: #fdecea; color: #c5221f; display: block; }
+
+  #reader { width: 100%; margin-top: 10px; border-radius: 10px; overflow: hidden; }
+
+  #detailCard {
+    display: none; margin-top: 12px; padding: 14px; border-radius: 10px;
+    background: #fff; border: 1px solid #ddd;
+  }
+  #detailCard .name { font-size: 18px; font-weight: bold; }
+  #detailCard .row { display: flex; justify-content: space-between; font-size: 15px; margin-top: 6px; color: #333; }
+  #detailCard .row span:first-child { color: #888; }
+  #detailCard .price { color: #1e8e3e; font-weight: bold; }
+  #detailCard .lowstock { color: #c5221f; font-weight: bold; }
+
+  .cart-item {
+    background: white; border-radius: 8px; padding: 10px 12px; margin-top: 8px;
+    display: flex; align-items: center; gap: 8px; border: 1px solid #e0e0e0;
+  }
+  .cart-item .info { flex: 1; min-width: 0; }
+  .cart-item .info .n { font-size: 15px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cart-item .info .d { font-size: 12px; color: #888; }
+  .cart-item .qtybox { display: flex; align-items: center; gap: 4px; }
+  .cart-item .qtybox button {
+    width: 30px; height: 30px; padding: 0; margin: 0; font-size: 18px; line-height: 1;
+    border-radius: 6px;
+  }
+  .cart-item .qtybox input { width: 40px; text-align: center; padding: 4px; font-size: 15px; }
+  .cart-item .pricebox { display: flex; align-items: center; gap: 2px; font-size: 14px; color: #555; }
+  .cart-item .pricebox input { width: 56px; text-align: right; padding: 4px; font-size: 15px; }
+  .cart-item .del { background: none; color: #c5221f; width: 24px; padding: 0; margin: 0; font-size: 20px; }
+  #cartTotal { text-align: right; font-size: 16px; margin-top: 10px; color: #333; }
+  #cartEmpty { text-align: center; color: #999; padding: 20px; font-size: 14px; }
+</style>
+</head>
+<body>
+  <h2>📷 摄像头扫码（备用）</h2>
+
+  <label>类型（整个购物车统一用这个类型）</label>
+  <select id="type">
+    <option value="销售出库">销售出库（卖出）</option>
+    <option value="采购入库">采购入库（进货）</option>
+    <option value="客户退货">客户退货</option>
+    <option value="供应商退货">供应商退货</option>
+    <option value="报损出库">报损出库</option>
+    <option value="盘点调整+">盘点调整 +</option>
+    <option value="盘点调整-">盘点调整 -</option>
+    <option value="调拨入">调拨入</option>
+    <option value="调拨出">调拨出</option>
+  </select>
+
+  <button id="camBtn" onclick="toggleCamera()">▶️ 打开摄像头</button>
+  <div id="reader"></div>
+
+  <label>或手动输入条码</label>
+  <input id="manualCode" placeholder="手动打字输入条码">
+  <button class="secondary" onclick="handleScan(document.getElementById('manualCode').value)">➕ 加入清单</button>
+
+  <div id="detailCard">
+    <div class="name" id="dName">-</div>
+    <div class="row"><span>颜色 / 款式尺寸</span><span id="dColorStyle">-</span></div>
+    <div class="row"><span>库位</span><span id="dLocation">-</span></div>
+    <div class="row"><span>零售价 / 教会价</span><span class="price" id="dPrice">-</span></div>
+    <div class="row"><span>当前库存</span><span id="dStock">-</span></div>
+  </div>
+
+  <div id="msg"></div>
+
+  <label style="margin-top:18px">购物清单</label>
+  <div id="cartEmpty">还没扫到东西</div>
+  <div id="cartList"></div>
+  <div id="cartTotal"></div>
+
+  <label>备注（选填，整单共用）</label>
+  <input id="note" placeholder="选填">
+
+  <button class="submit" onclick="submitAll()">提交全部（<span id="submitCount">0</span> 项）</button>
+
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script>
+    // ==== 改这两行：换成你自己的 Apps Script 部署网址和口令 ====
+    var EXEC_URL = 'https://script.google.com/macros/s/AKfycbyPN013TEYYDpnNPXjMeAH6RLgcNtP_S1ImCjB_pPfls80XPsQepPEKIeJApiOfhyGnWw/exec';
+    var API_TOKEN = 'ZLVaR8lDJAmsZX56n0orBs7u';
+    // ==========================================================
+
+    var typeEl = document.getElementById('type');
+    var noteEl = document.getElementById('note');
+    var msgEl = document.getElementById('msg');
+    var cart = [];
+    var html5QrCode = null;
+    var cameraOn = false;
+    var lastScanTime = 0;
+
+    function showMsg(text, cls) {
+      msgEl.textContent = text;
+      msgEl.className = cls;
+    }
+
+    function api(action, params) {
+      var url = EXEC_URL + '?action=' + action + '&token=' + encodeURIComponent(API_TOKEN);
+      Object.keys(params || {}).forEach(function (k) {
+        url += '&' + k + '=' + encodeURIComponent(params[k]);
+      });
+      return fetch(url).then(function (r) { return r.json(); });
+    }
+
+    function showDetail(p) {
+      var card = document.getElementById('detailCard');
+      document.getElementById('dName').textContent = p.name || p.articolo;
+      document.getElementById('dColorStyle').textContent = [p.color, p.style].filter(Boolean).join(' / ') || '-';
+      var loc = [p.zone && ('Zone ' + p.zone), p.aisle, p.bin].filter(Boolean).join(' / ');
+      document.getElementById('dLocation').textContent = loc || '-';
+      var priceText = (p.salePrice ? ('€' + Number(p.salePrice).toFixed(2)) : '-') +
+        ' / ' + (p.wholesalePrice ? ('€' + Number(p.wholesalePrice).toFixed(2)) : '-');
+      document.getElementById('dPrice').textContent = priceText;
+      var stockEl = document.getElementById('dStock');
+      stockEl.textContent = p.currentStock;
+      stockEl.className = (p.currentStock <= 0) ? 'lowstock' : '';
+      card.style.display = 'block';
+    }
+
+    function handleScan(code) {
+      code = (code || '').trim();
+      if (!code) return;
+      document.getElementById('manualCode').value = '';
+      showMsg('查询中…', 'warn');
+      api('lookup', { code: code })
+        .then(function (res) {
+          if (res.error) { showMsg('出错：' + res.error, 'err'); return; }
+          if (!res.product) { showMsg('这个条码在货品主档里找不到对应商品：' + code, 'warn'); return; }
+          showDetail(res.product);
+          addToCart(res.product, code);
+          showMsg('✓ 已加入清单：' + (res.product.name || res.product.articolo), 'ok');
+        })
+        .catch(function (err) { showMsg('网络出错：' + err.message, 'err'); });
+    }
+
+    function addToCart(p, code) {
+      var existing = cart.find(function (c) { return c.articolo === p.articolo; });
+      if (existing) {
+        existing.qty += 1;
+      } else {
+        cart.push({
+          articolo: p.articolo, barcode: code, name: p.name, color: p.color, style: p.style,
+          salePrice: p.salePrice, price: Number(p.salePrice) || 0, qty: 1
+        });
+      }
+      renderCart();
+    }
+
+    function renderCart() {
+      var listEl = document.getElementById('cartList');
+      var emptyEl = document.getElementById('cartEmpty');
+      var totalEl = document.getElementById('cartTotal');
+      var countEl = document.getElementById('submitCount');
+
+      if (!cart.length) {
+        emptyEl.style.display = 'block';
+        listEl.innerHTML = '';
+        totalEl.textContent = '';
+        countEl.textContent = '0';
+        return;
+      }
+      emptyEl.style.display = 'none';
+
+      listEl.innerHTML = cart.map(function (c, idx) {
+        var label = [c.color, c.style].filter(Boolean).join(' / ');
+        return '<div class="cart-item">' +
+          '<div class="info"><div class="n">' + (c.name || c.articolo) + '</div>' +
+          '<div class="d">' + (label || c.articolo) + '</div></div>' +
+          '<div class="qtybox">' +
+            '<button onclick="changeQty(' + idx + ',-1)">−</button>' +
+            '<input value="' + c.qty + '" onchange="setQty(' + idx + ',this.value)">' +
+            '<button onclick="changeQty(' + idx + ',1)">+</button>' +
+          '</div>' +
+          '<div class="pricebox">€<input type="number" step="0.01" min="0" value="' + c.price + '" onchange="setPrice(' + idx + ',this.value)"></div>' +
+          '<button class="del" onclick="removeItem(' + idx + ')">✕</button>' +
+        '</div>';
+      }).join('');
+
+      var totalQty = cart.reduce(function (s, c) { return s + c.qty; }, 0);
+      var totalAmount = cart.reduce(function (s, c) { return s + c.qty * (Number(c.price) || 0); }, 0);
+      totalEl.textContent = '共 ' + totalQty + ' 件，合计 €' + totalAmount.toFixed(2);
+      countEl.textContent = String(cart.length);
+    }
+
+    function changeQty(idx, delta) { cart[idx].qty = Math.max(1, cart[idx].qty + delta); renderCart(); }
+    function setQty(idx, val) {
+      var n = parseInt(val, 10);
+      cart[idx].qty = (isNaN(n) || n < 1) ? 1 : n;
+      renderCart();
+    }
+    function setPrice(idx, val) {
+      var n = parseFloat(val);
+      cart[idx].price = (isNaN(n) || n < 0) ? 0 : n;
+      renderCart();
+    }
+    function removeItem(idx) { cart.splice(idx, 1); renderCart(); }
+
+    function submitAll() {
+      if (!cart.length) { showMsg('购物清单是空的，先扫点东西', 'err'); return; }
+      var items = cart.map(function (c) {
+        return { barcode: c.barcode, qty: c.qty, price: c.price || '' };
+      });
+      showMsg('提交中…', 'warn');
+      api('submit', { type: typeEl.value, note: noteEl.value, items: JSON.stringify(items) })
+        .then(function (res) {
+          if (res.error) { showMsg('提交出错：' + res.error, 'err'); return; }
+          var notFoundCount = res.results.filter(function (r) { return r.notFound; }).length;
+          if (notFoundCount) {
+            showMsg('已提交 ' + res.results.length + ' 项，其中 ' + notFoundCount + ' 项条码未建档，麻烦去核对', 'warn');
+          } else {
+            showMsg('✓ 已提交 ' + res.results.length + ' 项，库存已更新', 'ok');
+          }
+          cart = [];
+          renderCart();
+          document.getElementById('detailCard').style.display = 'none';
+          noteEl.value = '';
+        })
+        .catch(function (err) { showMsg('网络出错：' + err.message, 'err'); });
+    }
+
+    function toggleCamera() {
+      var readerDiv = document.getElementById('reader');
+      var btn = document.getElementById('camBtn');
+      if (!cameraOn) {
+        html5QrCode = new Html5Qrcode('reader');
+        html5QrCode.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 250, height: 150 } },
+          function (decodedText) {
+            var now = Date.now();
+            if (now - lastScanTime < 1500) return; // 防止连续重复触发
+            lastScanTime = now;
+            handleScan(decodedText);
+          }
+        ).then(function () {
+          cameraOn = true;
+          btn.textContent = '⏹ 关闭摄像头';
+        }).catch(function (err) {
+          showMsg('摄像头打不开：' + err, 'err');
+        });
+      } else {
+        html5QrCode.stop().then(function () {
+          html5QrCode.clear();
+          cameraOn = false;
+          btn.textContent = '▶️ 打开摄像头';
+        });
+      }
+    }
+  </script>
+</body>
+</html>
