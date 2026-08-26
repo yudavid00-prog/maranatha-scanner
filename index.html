@@ -73,6 +73,9 @@
 
   <button id="camBtn" onclick="toggleCamera()">▶️ 打开摄像头</button>
   <div id="reader"></div>
+  <div id="camHint" style="display:none; text-align:center; font-size:13px; color:#888; margin-top:6px;">
+    条码横着放，填满框里，距离 10~15cm，光线别太暗
+  </div>
 
   <label>或手动输入条码</label>
   <input id="manualCode" placeholder="手动打字输入条码">
@@ -246,10 +249,18 @@
       var readerDiv = document.getElementById('reader');
       var btn = document.getElementById('camBtn');
       if (!cameraOn) {
-        html5QrCode = new Html5Qrcode('reader');
+        html5QrCode = new Html5Qrcode('reader', {
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.QR_CODE
+          ],
+          verbose: false
+        });
         html5QrCode.start(
           { facingMode: 'environment' },
-          { fps: 10, qrbox: { width: 250, height: 150 } },
+          { fps: 15, qrbox: { width: 280, height: 120 }, aspectRatio: 1.777778 },
           function (decodedText) {
             var now = Date.now();
             if (now - lastScanTime < 1500) return; // 防止连续重复触发
@@ -259,10 +270,12 @@
         ).then(function () {
           cameraOn = true;
           btn.textContent = '⏹ 关闭摄像头';
+          document.getElementById('camHint').style.display = 'block';
         }).catch(function (err) {
           showMsg('摄像头打不开：' + err, 'err');
         });
       } else {
+        document.getElementById('camHint').style.display = 'none';
         html5QrCode.stop().then(function () {
           html5QrCode.clear();
           cameraOn = false;
