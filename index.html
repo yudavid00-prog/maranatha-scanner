@@ -72,7 +72,7 @@
   </select>
 
   <button id="camBtn" onclick="toggleCamera()">▶️ 打开摄像头</button>
-  <div id="reader"></div>
+  <video id="reader" muted playsinline style="width:100%; margin-top:10px; border-radius:10px; display:none; background:#000;"></video>
   <div id="camHint" style="display:none; text-align:center; font-size:13px; color:#888; margin-top:6px;">
     条码横着放，填满框里，距离 10~15cm，光线别太暗
   </div>
@@ -101,7 +101,7 @@
 
   <button class="submit" onclick="submitAll()">提交全部（<span id="submitCount">0</span> 项）</button>
 
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js"></script>
   <script>
     // ==== 改这两行：换成你自己的 Apps Script 部署网址和口令 ====
     var EXEC_URL = 'https://script.google.com/macros/s/AKfycbyPN013TEYYDpnNPXjMeAH6RLgcNtP_S1ImCjB_pPfls80XPsQepPEKIeJApiOfhyGnWw/exec';
@@ -112,7 +112,6 @@
     var noteEl = document.getElementById('note');
     var msgEl = document.getElementById('msg');
     var cart = [];
-    var html5QrCode = null;
     var cameraOn = false;
     var lastScanTime = 0;
 
@@ -245,27 +244,38 @@
         .catch(function (err) { showMsg('网络出错：' + err.message, 'err'); });
     }
 
+    var zxingReader = null;
+
     function toggleCamera() {
-      var readerDiv = document.getElementById('reader');
+      var videoEl = document.getElementById('reader');
       var btn = document.getElementById('camBtn');
       if (!cameraOn) {
-        html5QrCode = new Html5Qrcode('reader', {
-          formatsToSupport: [
-            Html5QrcodeSupportedFormats.CODE_128,
-            Html5QrcodeSupportedFormats.CODE_39,
-            Html5QrcodeSupportedFormats.EAN_13,
-            Html5QrcodeSupportedFormats.QR_CODE
-          ],
-          verbose: false
-        });
-        html5QrCode.start(
-          { facingMode: 'environment' },
-          { fps: 15, qrbox: { width: 280, height: 120 }, aspectRatio: 1.777778 },
-          function (decodedText) {
-            var now = Date.now();
-            if (now - lastScanTime < 1500) return; // 防止连续重复触发
-            lastScanTime = now;
-            handleScan(decodedText);
+        if (typeof ZXing === 'undefined') {
+          showMsg('摄像头组件加载失败，请用手动输入', 'err');
+          return;
+        }
+        var hints = new Map();
+        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+          ZXing.BarcodeFormat.CODE_128,
+          ZXing.BarcodeFormat.CODE_39,
+          ZXing.BarcodeFormat.EAN_13,
+          ZXing.BarcodeFormat.EAN_8,
+          ZXing.BarcodeFormat.QR_CODE
+        ]);
+        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+        zxingReader = new ZXing.BrowserMultiFormatReader(hints);
+        videoEl.style.display = 'block';
+        zxingReader.decodeFromConstraints(
+          { video: { facingMode: 'environment' } },
+          videoEl,
+          function (result, err) {
+            if (result) {
+              var now = Date.now();
+              if (now - lastScanTime < 1500) return; // 防止连续重复触发
+              lastScanTime = now;
+              handleScan(result.getText());
+            }
+            // err 是"这一帧没找到码"，扫描过程中会不断触发，属于正常现象，不用处理
           }
         ).then(function () {
           cameraOn = true;
@@ -273,14 +283,14 @@
           document.getElementById('camHint').style.display = 'block';
         }).catch(function (err) {
           showMsg('摄像头打不开：' + err, 'err');
+          videoEl.style.display = 'none';
         });
       } else {
         document.getElementById('camHint').style.display = 'none';
-        html5QrCode.stop().then(function () {
-          html5QrCode.clear();
-          cameraOn = false;
-          btn.textContent = '▶️ 打开摄像头';
-        });
+        if (zxingReader) zxingReader.reset();
+        videoEl.style.display = 'none';
+        cameraOn = false;
+        btn.textContent = '▶️ 打开摄像头';
       }
     }
   </script>
