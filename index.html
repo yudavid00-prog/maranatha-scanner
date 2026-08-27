@@ -58,6 +58,9 @@
 <body>
   <h2>📷 摄像头扫码（备用）</h2>
 
+  <label>经手人</label>
+  <input id="handler" value="XYZ">
+
   <label>类型（整个购物车统一用这个类型）</label>
   <select id="type">
     <option value="销售出库">销售出库（卖出）</option>
@@ -107,6 +110,7 @@
     // ==========================================================
 
     var typeEl = document.getElementById('type');
+    var handlerEl = document.getElementById('handler');
     var noteEl = document.getElementById('note');
     var msgEl = document.getElementById('msg');
     var cart = [];
@@ -225,7 +229,7 @@
         return { barcode: c.barcode, qty: c.qty, price: c.price || '' };
       });
       showMsg('提交中…', 'warn');
-      api('submit', { type: typeEl.value, note: noteEl.value, items: JSON.stringify(items) })
+      api('submit', { type: typeEl.value, handler: handlerEl.value, note: noteEl.value, items: JSON.stringify(items) })
         .then(function (res) {
           if (res.error) { showMsg('提交出错：' + res.error, 'err'); return; }
           var notFoundCount = res.results.filter(function (r) { return r.notFound; }).length;
