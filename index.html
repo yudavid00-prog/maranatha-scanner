@@ -76,6 +76,9 @@
   <div id="camHint" style="display:none; text-align:center; font-size:13px; color:#888; margin-top:6px;">
     条码横着放，填满框里，距离 10~15cm，光线别太暗
   </div>
+  <div id="scanDebug" style="display:none; text-align:center; font-size:12px; color:#aaa; margin-top:4px; font-family:monospace;">
+    诊断：尝试次数 0 | 最近一次：-
+  </div>
 
   <label>或手动输入条码</label>
   <input id="manualCode" placeholder="手动打字输入条码">
@@ -262,31 +265,41 @@
           ZXing.BarcodeFormat.EAN_8,
           ZXing.BarcodeFormat.QR_CODE
         ]);
-        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+        // 注意：没加 TRY_HARDER —— 连续扫描场景下它会让每一帧处理变慢，反而更像"没反应"
         zxingReader = new ZXing.BrowserMultiFormatReader(hints);
         videoEl.style.display = 'block';
+        var debugEl = document.getElementById('scanDebug');
+        var attemptCount = 0;
+        debugEl.style.display = 'block';
+        debugEl.textContent = '诊断：尝试次数 0 | 最近一次：等待摄像头启动…';
         zxingReader.decodeFromConstraints(
           { video: { facingMode: 'environment' } },
           videoEl,
           function (result, err) {
+            attemptCount++;
             if (result) {
+              debugEl.textContent = '诊断：尝试次数 ' + attemptCount + ' | 最近一次：✓ 识别到 ' + result.getText();
               var now = Date.now();
               if (now - lastScanTime < 1500) return; // 防止连续重复触发
               lastScanTime = now;
               handleScan(result.getText());
+            } else {
+              // err 是"这一帧没找到码"，扫描过程中会不断触发，属于正常现象
+              debugEl.textContent = '诊断：尝试次数 ' + attemptCount + ' | 最近一次：未识别到（' + (err ? err.name : '?') + '）';
             }
-            // err 是"这一帧没找到码"，扫描过程中会不断触发，属于正常现象，不用处理
           }
         ).then(function () {
           cameraOn = true;
           btn.textContent = '⏹ 关闭摄像头';
           document.getElementById('camHint').style.display = 'block';
         }).catch(function (err) {
-          showMsg('摄像头打不开：' + err, 'err');
+          showMsg('摄像头打不开：' + (err && err.message ? err.message : err), 'err');
+          debugEl.textContent = '诊断：摄像头启动失败 - ' + (err && err.message ? err.message : err);
           videoEl.style.display = 'none';
         });
       } else {
         document.getElementById('camHint').style.display = 'none';
+        document.getElementById('scanDebug').style.display = 'none';
         if (zxingReader) zxingReader.reset();
         videoEl.style.display = 'none';
         cameraOn = false;
