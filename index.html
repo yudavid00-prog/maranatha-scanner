@@ -72,8 +72,8 @@
   </select>
 
   <button id="camBtn" onclick="toggleCamera()">▶️ 打开摄像头</button>
-  <div id="videoWrap" style="display:none; margin-top:10px;">
-    <video id="reader" muted playsinline style="width:100%; aspect-ratio:8/3; object-fit:cover; display:block; border-radius:10px; background:#000;"></video>
+  <div id="videoWrap" style="display:none; margin-top:10px; border:4px solid transparent; border-radius:12px; transition:border-color .15s; box-sizing:border-box;">
+    <video id="reader" muted playsinline style="width:100%; aspect-ratio:8/3; object-fit:cover; display:block; border-radius:8px; background:#000;"></video>
   </div>
   <div id="camHint" style="display:none; text-align:center; font-size:13px; color:#888; margin-top:6px;">
     条码横着放，填满框里，距离 10~15cm，光线别太暗
@@ -268,11 +268,17 @@
         // 注意：没加 TRY_HARDER —— 连续扫描场景下它会让每一帧处理变慢，反而更像"没反应"
         zxingReader = new ZXing.BrowserMultiFormatReader(hints);
         videoWrap.style.display = 'block';
+        videoWrap.style.borderColor = 'transparent';
         zxingReader.decodeFromConstraints(
           { video: { facingMode: 'environment' } },
           videoEl,
           function (result, err) {
             if (result) {
+              videoWrap.style.borderColor = '#1e8e3e';
+              clearTimeout(videoWrap._resetTimer);
+              videoWrap._resetTimer = setTimeout(function () {
+                videoWrap.style.borderColor = 'transparent';
+              }, 700);
               var now = Date.now();
               if (now - lastScanTime < 1500) return; // 防止连续重复触发
               lastScanTime = now;
